@@ -1,127 +1,181 @@
-# omaSearch
+# omaFind
 
-Quick AI search for [Omarchy](https://omarchy.org/). Press a key, ask, keep working.
+Blazing-fast, Spotlight-style local file search overlay for [Omarchy Linux](https://omarchy.org/) and Hyprland. Press a key, find any file across your system in milliseconds, and keep working.
 
-> **One box, two ways to search.** Type your question, then:
+> **One box, instant results.** Type your search query, then:
 >
-> - **Enter** asks your AI agent (Claude, Codex, OpenCode…) and shows the answer right there.
-> - **Ctrl+Enter** searches Google for it in your default browser.
+> - **Enter** opens the selected file or folder in your default application.
+> - **Ctrl+C** copies the absolute path to your clipboard.
+> - **Ctrl+Enter** searches Google in your default browser if you can't find it locally.
 
-![omaSearch: open, ask, read the answer, start a new chat](media/demo.gif)
+**Plugin id:** `sanjith.omafind` · **License:** MIT · **Version:** 1.0.0 · **Author:** [Sanjith](https://github.com/sanjithdoescode)
 
-omaSearch opens a glass overlay over whatever you're doing, sends your question to Claude (or your default agent: Codex, OpenCode, Gemini, Grok, Crush, Pi), and shows the answer right there, formatted. Follow up in the same chat, reopen a recent one, paste an image, and approve the commands Claude wants to run.
+---
 
-**Plugin id:** `io.github.5h3rd1l.omasearch` · **License:** MIT · **Version:** 1.1.1
+## Overview
 
-Based on [omAsk](https://github.com/shabdar/omarchy-ask) by Ali Shabdar.
+**omaFind** is a native Quickshell layer-shell overlay for Omarchy. It repurposes the frosted liquid-glass pill and card aesthetic of the open-source `omaSearch` AI plugin, eliminating external API calls and background LLM daemons in favor of an ultra-responsive, fully local file search engine powered by `plocate` and `fd`.
+
+- **Instant search as you type**: Average query lookup time is **~6ms** using `plocate`'s memory-mapped inverted index.
+- **Live filesystem fallback**: Toggle to `fd` with `Ctrl+L` for real-time crawling to discover brand new files created after the last database index update.
+- **Native look & feel**: Fully adapts to your active Omarchy theme palette (`Color.menu` and `Style`) with hardware-accelerated compositor blur and glass sheen.
+- **100% Private & Offline**: Zero network requests, zero telemetry, zero background daemons.
+
+---
 
 ## Features
 
-- **Ask or Google, same box.** Enter sends the question to your agent; Ctrl+Enter searches Google in your default browser instead.
-- **Fast answers.** Claude answers stream in from a process that starts the moment omaSearch opens, so replies begin at once. Follow-ups continue the same Claude session.
-- **Readable answers.** Paragraphs, lists, tables, headings, syntax-coloured code blocks with a Copy button, and links that open in your browser.
-- **See what it ran.** When Claude runs commands, click the step to see each command and its output.
-- **Safe mode** (on by default). Before Claude runs a command you get **Allow**, **Always in this chat** or **Deny**.
-- **Recent chats.** Listed under the input when no chat is open, including older omaSearch chats Claude has on disk. Type to filter, ↑/↓ then Enter to open, pin the ones you keep. New chats get a short title.
-- **Images.** Paste one with Ctrl+V, or pick an older one from clipboard history (Super+Ctrl+V).
-- **Copy anything.** Selecting text copies it; a click copies a whole message or code block.
-- **Temporary chats** (Ctrl+I) for a quick question you don't want kept, with their own violet look so you always know.
-- **Short or detailed answers**, a model picker and an agent picker.
-- **Liquid-glass look** that follows your Omarchy theme.
-- **Ctrl+H** shows every shortcut.
+- ⚡ **Dual-Engine Search**:
+  - **Index Mode (`plocate`)**: Instantaneous sub-10ms lookup against the system inverted index database.
+  - **Live Mode (`fd`)**: Multi-threaded traversal directly on the filesystem (`Ctrl+L`) to locate new, unindexed files.
+- 🎯 **Configurable Search Scope**:
+  - Restricts search to `$HOME` (`~`) by default for speed and relevance.
+  - Quick toggle with `Ctrl+H` to search the entire filesystem (`/`).
+- ⌨️ **Keyboard-Driven Workflow**:
+  - Full arrow-key (`↑`/`↓`) and `PageUp`/`PageDown` navigation.
+  - `Enter` opens the item with `xdg-open`.
+  - `Ctrl+C` copies the full path with animated toast confirmation.
+  - `Ctrl+Enter` falls back to a web search in your browser.
+  - `Esc` immediately dismisses the overlay.
+- 📂 **Auto File Classification & Nerd Font Icons**:
+  - Clean icons distinguishing directories, source code, images, video, audio, PDFs, archives, text documents, and config/data files.
+- 🗂️ **Smart Path Formatting**:
+  - Replaces `$HOME` with `~` for cleaner presentation.
+  - Elides paths from the left (`ElideLeft`) so parent directories remain visible even in deeply nested folder structures.
+- 🪟 **Liquid-Glass Design**:
+  - Preserves the frosted pill + expandable card with soft sheen, border rim, and smooth animations.
+  - Draggable search pill that remembers its screen position across sessions in `~/.local/state/omafind/position.json`.
 
-## Screenshots
-
-| | |
-| --- | --- |
-| ![A formatted answer](media/answer.png) | ![Recent chats under the input](media/recent.png) |
-| **Formatted answers** with coloured inline code | **Recent chats** when no chat is open |
-| ![Safe mode asking before a command](media/approve.png) | ![A tool step and its answer](media/tools.png) |
-| **Safe mode**: Allow, Always in this chat, or Deny | **Tool steps**: click to see the command and its output |
-
-![Every shortcut (Ctrl+H)](media/help.png)
-
-## Install
-
-```bash
-omarchy plugin add https://github.com/5h3rd1l/omaSearch.git --enable --yes
-```
-
-Installing doesn't touch your config. Add a key and the glass blur to `~/.config/hypr/bindings.lua`:
-
-```lua
-o.bind("SUPER + Q", "omaSearch", "omarchy-shell shell toggle io.github.5h3rd1l.omasearch '{}'")
--- Glass: blur behind the card and the input, not the dimmed backdrop.
-hl.layer_rule({ match = { namespace = "^omasearch$" }, blur = true, ignore_alpha = 0.45 })
-```
-
-`SUPER + Q` is free on a stock Omarchy setup; pick another key if you use it.
-
-Then set an agent (Claude works best: streaming, safe mode, images and recent chats):
-
-```bash
-omarchy default agent claude
-```
-
-Update or remove:
-
-```bash
-omarchy plugin update io.github.5h3rd1l.omasearch
-omarchy plugin remove io.github.5h3rd1l.omasearch --yes
-```
-
-## Use
-
-| Key | Does |
-| --- | --- |
-| Super+Q | Open / close |
-| Enter | Ask |
-| Shift+Enter | New line (the input grows with your text) |
-| Ctrl+Enter | Search Google in your default browser |
-| Ctrl+↑ / Ctrl+↓ | Bring back earlier questions |
-| Ctrl+C | Stop the answer (copies instead when text is selected) |
-| Ctrl+N | New chat |
-| Ctrl+I | Temporary chat: nothing is saved, and it stays out of recent chats (Ctrl+I again ends it) |
-| Ctrl+E | Continue the chat in the terminal (Claude, Codex, OpenCode) |
-| Ctrl+Y | Copy the last answer |
-| Ctrl+D | Short or detailed answers |
-| Ctrl+V | Paste text, or attach a copied image (Claude, max 5 MB) |
-| Super+Ctrl+V | Pick an older image or text from clipboard history |
-| Ctrl+H | All shortcuts |
-| Page Up / Down | Scroll the chat |
-| Esc | Close a menu, then omaSearch (the chat stays until New) |
-
-With no chat open, recent chats are listed under the input: type to filter them, ↑/↓ and Enter to open one, and hover to pin or remove one. Click the model name for the model list and the **Detailed answers** and **Safe mode** switches, and the agent logo to switch agents.
-
-## Safe mode
-
-On by default. Claude asks before running a command, and omaSearch shows it with **Allow**, **Always in this chat** and **Deny**. Read-only commands Claude considers harmless run without asking. Turn it off in the model menu and Claude runs commands (including passwordless sudo, if you have it) without asking; a shield next to the model name reminds you.
-
-For other agents, safe mode keeps Codex in its read-only sandbox and OpenCode on its plan agent.
-
-## Your data
-
-- **Saved chats** (last 25, plus pinned ones): `~/.local/state/omasearch/history.json`, with settings and the pill position alongside. The folder is private to you (0700). Delete the file to forget them.
-- **Claude chats** also come from Claude's own session files (omaSearch's print-mode sessions in `~/.claude/projects/<your home>/`). Removing a chat from the list only hides it; Claude's file stays.
-- **Pasted images** go to `~/.cache/omasearch/shots` and are deleted once sent (unsent ones after an hour).
-- **Titles** for new chats come from one quick Claude Haiku call per chat, with no saved session.
-- **Temporary chats** (Ctrl+I) aren't saved anywhere by omaSearch: no recent-chats entry, no title, no question history. Claude and Codex run without saving the session either. OpenCode has no such option and keeps its own log.
-
-Nothing is sent anywhere except to the agent you ask.
+---
 
 ## Requirements
 
-- Omarchy with `omarchy-shell` (Quickshell)
-- Python 3
-- An agent CLI on `PATH`, for example Claude Code (`omarchy default agent claude` installs it)
-- `wl-clipboard` (`wl-copy`, `wl-paste`), stock on Omarchy
+omaFind uses standard Linux tools available on Arch / Omarchy:
 
-See [ARCHITECTURE.md](ARCHITECTURE.md) for how it works.
+- **[`plocate`](https://gitlab.com/eile/plocate)** — Primary search backend (recommended for instant queries).
+  - Ensure the updatedb timer is enabled:
+    ```bash
+    sudo systemctl enable --now plocate-updatedb.timer
+    ```
+- **[`fd`](https://github.com/sharkdp/fd)** — Fallback engine for live unindexed searches.
+- **`wl-clipboard`** — Provides `wl-copy` for Wayland clipboard support.
+- **`xdg-utils`** — Provides `xdg-open` to launch files in default applications.
+- **[Nerd Fonts](https://www.nerdfonts.com/)** — Required for file-type icons in the result list (configured in your Omarchy font settings).
 
-## Credits
+---
 
-omaSearch started as a fork of [omAsk](https://github.com/shabdar/omarchy-ask) by Ali Shabdar, and keeps its MIT license.
+## Installation
+
+Install directly with the Omarchy plugin manager:
+
+```bash
+omarchy plugin add https://github.com/sanjithdoescode/omaFind.git --enable --yes
+```
+
+### Keybinding & Window Rules
+
+Add the keybinding and Hyprland layer-shell blur rule to your `~/.config/hypr/bindings.lua`:
+
+```lua
+-- Bind omaFind toggle (e.g. ALT + SPACE or SUPER + SPACE)
+o.bind("ALT + SPACE", "omaFind", "omarchy-shell shell toggle sanjith.omafind '{}'")
+
+-- GPU-accelerated glass blur for the overlay namespace
+hl.layer_rule({ match = { namespace = "^omafind$" }, blur = true, ignore_alpha = 0.45 })
+```
+
+> **Note:** If you want the overlay pre-loaded into memory for instantaneous response on keypress, ensure `"sanjith.omafind"` is included in the `plugins` array of `~/.config/omarchy/shell.json`.
+
+### Updating & Removing
+
+```bash
+# Update plugin to latest version
+omarchy plugin update sanjith.omafind
+
+# Remove plugin
+omarchy plugin remove sanjith.omafind --yes
+```
+
+---
+
+## Shortcuts & Navigation
+
+| Key | Context | Action |
+| :--- | :--- | :--- |
+| **`Alt + Space`** | Global (Hyprland) | Toggle omaFind overlay |
+| **Typing** | Search Pill | Live debounced search against filesystem |
+| **`↑` / `↓`** | Results List | Navigate selection item-by-item |
+| **`Page Up` / `Page Down`** | Results List | Jump selection by 10 items |
+| **`Enter`** | Selected Result | Open file or folder in default application (`xdg-open`) |
+| **`Ctrl + C`** | Selected Result | Copy full absolute path to clipboard (`wl-copy`) |
+| **`Ctrl + Enter`** | Search Pill | Search query on Google in default browser |
+| **`Ctrl + H`** | Search Pill | Toggle search scope between **`$HOME` (`~`)** and **Whole System (`/`)** |
+| **`Ctrl + L`** | Search Pill | Toggle backend between **Indexed (`plocate`)** and **Live (`fd`)** |
+| **`Esc`** | Any | Close / dismiss the overlay |
+
+---
+
+## Architecture
+
+```
+                      [ ALT + SPACE ]
+                             │
+                             ▼
+ ┌─────────────────────────────────────────────────────────────┐
+ │       Overlay.qml (Quickshell Layer-Shell Overlay)          │
+ │  • Frosted glass pill + card with GlassSheen & border sheen │
+ │  • Draggable pill with remembered screen coordinates        │
+ │  • 120ms keystroke debounce timer                           │
+ └───────────────────────────┬─────────────────────────────────┘
+                             │
+                  python3 -I -S search.py
+                             │
+               ┌─────────────┴─────────────┐
+               ▼                           ▼
+        [ plocate ]                    [ fd ]
+     Primary (~6ms)              Fallback / Live
+  Inverted index database     Live multi-threaded crawl
+  Filter to $HOME / all       Finds unindexed/new files
+               │                           │
+               └─────────────┬─────────────┘
+                             │ JSON output
+                             ▼
+ ┌─────────────────────────────────────────────────────────────┐
+ │               SearchModel.js Helper                         │
+ │  • JSON output validation and string length sanitization    │
+ │  • Nerd Font icon mapping per classified file / MIME type   │
+ │  • Path abbreviation (~/ replacement for $HOME)             │
+ └───────────────────────────┬─────────────────────────────────┘
+                             │
+            ┌────────────────┼────────────────┐
+            ▼                ▼                ▼
+      [ Enter ]       [ Ctrl+Enter ]      [ Ctrl+C ]
+       xdg-open       Google Search       wl-copy
+     (Default App)    (Default Browser)  (Clipboard)
+```
+
+---
+
+## Standalone Backend Testing
+
+You can run and benchmark the backend script directly from your terminal:
+
+```bash
+# Fast plocate index search in $HOME
+python3 search.py --query "README" --limit 50
+
+# Live multi-threaded fd search across the entire system
+python3 search.py --query "config" --all --live
+```
+
+---
+
+## Credits & Acknowledgments
+
+- Built by **[Sanjith](https://github.com/sanjithdoescode)**.
+- Adapted from the glass overlay interface of **[omaSearch](https://github.com/5h3rd1l/omaSearch)** by Rubas Ali and **[omAsk](https://github.com/shabdar/omarchy-ask)** by Ali Shabdar.
+- Built for **[Omarchy Linux](https://omarchy.org/)** and **[Quickshell](https://quickshell.outfoxxed.me/)**.
 
 ## License
 
-MIT. See [LICENSE](LICENSE).
+This project is licensed under the [MIT License](LICENSE).

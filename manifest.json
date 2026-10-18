@@ -1,12 +1,11 @@
 {
   "schemaVersion": 1,
-  "id": "io.github.5h3rd1l.omasearch",
-  "name": "omaSearch",
-  "version": "1.1.1",
-  "author": "Rubas Ali",
+  "id": "sanjith.omafind",
+  "name": "omaFind",
+  "version": "1.0.0",
+  "author": "Sanjith",
   "license": "MIT",
-  "homepage": "https://github.com/5h3rd1l/omaSearch",
-  "description": "Quick AI search for Omarchy: one key opens an overlay where Enter asks Claude (or your default agent) and Ctrl+Enter searches Google in your default browser. Formatted answers, commands you approve, pasted images and recent chats.",
+  "description": "Blazing-fast local file search for Omarchy — Spotlight-style file finder powered by plocate with an fd live-search fallback. Type to search $HOME instantly, ↑↓ to navigate, Enter to open.",
   "kinds": [
     "overlay"
   ],

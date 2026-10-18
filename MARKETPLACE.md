@@ -2,14 +2,14 @@
 
 Paste into a new issue on [omacom/omarchy-plugin-marketplace](https://github.com/omacom/omarchy-plugin-marketplace).
 
-**Title:** `[Plugin]: omaSearch`
+**Title:** `[Plugin]: omaFind`
 
-**Repository URL:** `https://github.com/5h3rd1l/omaSearch`
+**Repository URL:** `https://github.com/sanjithdoescode/omaFind`
 
 **Category:** `Productivity`
 
-**Tags:** `ai`, `search`, `claude`, `quickshell`, `hyprland`
+**Tags:** `files`, `search`, `spotlight`, `plocate`, `fd`, `quickshell`, `hyprland`
 
 **Maintainer notes:**
 
-> Overlay plugin. Questions go to the user's already-installed agent CLI on stdin (never argv) via `python3 -I -S ask.py`. For Claude, one `claude -p` stream-json process runs per chat; safe mode (default on) routes every permission request to the overlay for Allow / Deny, and when the user turns it off Claude runs with `--dangerously-skip-permissions`. Saved chats and settings live in `~/.local/state/omasearch` (0700); pasted images in `~/.cache/omasearch/shots`, deleted after sending. Recent chats also read the user's own Claude session files for omaSearch's print-mode sessions. New chats get a title from one `claude -p --model haiku --no-session-persistence` call. No sudo, no downloads, no writes to user config; the key and blur rule are documented, not installed.
+> Overlay plugin for fast local file search. Searches $HOME or the whole filesystem via `plocate` (instant inverted index, ~6ms) with an `fd` live-search fallback (`Ctrl+L`). Opens files/folders with `xdg-open`, copies paths with `wl-copy` (`Ctrl+C`), and searches the web (`Ctrl+Enter`). Includes frosted glass UI following Omarchy theme colors, window position persistence in `~/.local/state/omafind/position.json`, zero daemons, zero telemetry, no external network calls.

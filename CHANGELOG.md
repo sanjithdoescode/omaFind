@@ -1,6 +1,20 @@
 # Changelog
 
-## 1.1.1
+## 1.0.0 — omaFind
+
+First release of **omaFind** (`sanjith.omafind`), an ultra-fast local file search overlay for Omarchy Linux and Hyprland, adapted from the glass interface of omaSearch.
+
+- **Dual-Engine Search**: Powered by `plocate` for instant index search (~6ms) with an `fd` fallback / live search mode (`Ctrl+L`) for newly created files.
+- **Scope Toggle**: Switch between `$HOME`-only search (`~`) and whole-system search (`/`) with `Ctrl+H`.
+- **Keyboard-Driven Workflow**: Navigate results with `↑`/`↓` and `PageUp`/`PageDown`, open in default app with `Enter` (`xdg-open`), copy path to Wayland clipboard with `Ctrl+C` (`wl-copy`), search Google in browser with `Ctrl+Enter`.
+- **Nerd Font Glyphs**: Auto file type classification with distinct Nerd Font icons for folders, code, images, audio, video, pdfs, archives, data, and docs.
+- **Glass UI**: Retains Omarchy theme integration, liquid-glass sheen, compositor blur (`namespace: "omafind"`), draggable pill, and position persistence.
+- **Zero AI / Zero Telemetry**: Fully local, runs on-device with no external network requests or background daemons.
+
+---
+
+## omaSearch Historical Releases
+
 
 - Security: the overlay no longer writes its state files (`history.json`, `settings.json`, `position.json`) itself. Every write goes through `ask.py --save`, which checks the folder each time and writes relative to its verified descriptor (temp file with `O_EXCL | O_NOFOLLOW`, then rename), so a symlinked state folder can't redirect a write
 - The state files are read only after `ask.py --prepare` has confirmed the folder is a real, private folder of yours; if it isn't, omaSearch saves nothing and says why
