@@ -44,7 +44,7 @@ fn is_noise(path: &str) -> bool {
 }
 
 // ---------------------------------------------------------------------------
-// File classification (mirrors search.py classify())
+// File classification
 // ---------------------------------------------------------------------------
 
 fn classify(path: &str) -> &'static str {

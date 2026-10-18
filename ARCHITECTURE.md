@@ -1,6 +1,6 @@
 # Architecture
 
-omaFind is a `keepLoaded` Omarchy overlay (plugin id `sanjith.omafind`). The shell summons `Overlay.qml`, which executes the Python search backend (`search.py`) and paints the results.
+omaFind is a `keepLoaded` Omarchy overlay (plugin id `sanjith.omafind`). The shell summons `Overlay.qml`, which executes the native Rust search backend (`bin/omafind-search`) and paints the results.
 
 ```
                       [ ALT + SPACE ] / omarchy-shell toggle
@@ -14,30 +14,29 @@ omaFind is a `keepLoaded` Omarchy overlay (plugin id `sanjith.omafind`). The she
 │  • Keystroke debouncing (searchDebounce)                                │
 └───────────────────────────────────┬─────────────────────────────────────┘
                                     │
-                         python3 -I -S search.py
+                         bin/omafind-search (Rust)
                                     │
-                      ┌─────────────┴─────────────┐
-                      ▼                           ▼
-               [ plocate ]                    [ fd ]
-            Primary (~6ms)              Fallback / Live
-         Inverted index database     Live multi-threaded crawl
-         Filter to $HOME / all       Finds unindexed/new files
-                      │                           │
-                      └─────────────┬─────────────┘
-                                    │ JSON Array on stdout
+               ┌────────────────────┼────────────────────┐
+               ▼                    ▼                    ▼
+        [ Desktop Apps ]       [ plocate ]            [ fd ]
+       .desktop scanner      Primary (~6ms)       Fallback / Live
+       Name, Exec, etc.     Inverted index DB    Multi-threaded crawl
+               │                    │                    │
+               └────────────────────┼────────────────────┘
+                                    │ Scored, Ranked & Pre-sanitized JSON
                                     ▼
 ┌─────────────────────────────────────────────────────────────────────────┐
-│                         SearchModel.js Helper                           │
-│  • JSON output validation and normalization                             │
-│  • Nerd Font icon mapping per classified file/directory type            │
-│  • Path abbreviation (~/ replacement for $HOME)                         │
+│                              Overlay.qml                                │
+│  • Direct JSON parsing into results ListModel                           │
+│  • Nerd Font glyph & desktop theme icon rendering                       │
+│  • Drag coordinate persistence via omafind-search --save-pos (Rust)     │
 └───────────────────────────────────┬─────────────────────────────────────┘
                                     │
                    ┌────────────────┼────────────────┐
                    ▼                ▼                ▼
              [ Enter ]       [ Ctrl+Enter ]      [ Ctrl+C ]
-              xdg-open       Google Search       wl-copy
-            (Default App)    (Default Browser)  (Clipboard)
+          gtk-launch/open    Google Search       wl-copy
+           (Default App)    (Default Browser)  (Clipboard)
 ```
 
 ## Overlay.qml
@@ -46,30 +45,24 @@ The UI and all state. `open` / `close` / `toggle` / `dismiss` form the IPC surfa
 
 | Component | What it does |
 | --- | --- |
-| `searchProc` | Subprocess running `search.py --query <text> [--limit 50] [--home-only/--all] [--live]` |
-| `resultsModel` | `ListModel` storing results (`rPath`, `rName`, `rDir`, `rKind`) |
-| `resultsList` | `Flickable` view rendering matching files with Nerd Font icons, selection highlight, and left-elided paths |
+| `searchProc` | Subprocess running `bin/omafind-search --query <text> [--limit 50] [--home-only/--all] [--live]` |
+| `resultsModel` | `ListModel` storing results (`rPath`, `rName`, `rDir`, `rKind`, `rGlyph`, `rIcon`) |
+| `resultsList` | `Flickable` view rendering matching apps and files with Nerd Font icons, selection highlight, and left-elided paths |
 | `copyProc` | Puts the selected item's absolute path onto the Wayland clipboard via `/usr/bin/wl-copy` |
-| `savePosProc` | Atomic write of pill drag coordinates to `~/.local/state/omafind/position.json` |
+| `savePosProc` | Atomic write of pill drag coordinates via `bin/omafind-search --save-pos` to `~/.local/state/omafind/position.json` |
 | `GlassSheen` | Liquid-glass finish (sheen, rim, and gradient) on the card and pill |
 
 State lives in `~/.local/state/omafind/position.json`.
 
-## SearchModel.js
+## omafind-search (Rust)
 
-Shared helper library (`.pragma library`):
-- `KIND_ICONS`: Nerd Font icon mapping for directory, code, image, video, audio, pdf, archive, text, data, and generic files.
-- `parseSearchOutput`: Validates and parses the JSON response from `search.py`, clipping string lengths to safeguard UI memory.
-- `clip` & `escapeHtml`: String utilities for sanitizing labels.
+Standalone native Rust backend binary (`src/main.rs`). Scans desktop applications, queries `plocate` (default index) or `fd` (live traversal), scores/ranks hits, sanitizes output, and emits structured JSON to stdout. Also handles atomic position state persistence via `--save-pos`.
 
-## search.py
-
-Standalone search CLI script. Executes either `plocate` (default index) or `fd` (live traversal) and prints a structured JSON object to stdout.
-
-- `--query <text>`: Search term (required).
+- `--query <text>`: Search term (required for search).
 - `--limit <int>`: Max results to return (default 50).
 - `--home-only` / `--all`: Filter results to `$HOME` (default) or entire filesystem.
 - `--live`: Force `fd` search to discover files not yet indexed by `plocate`.
+- `--save-pos`: Read `{dragX, dragY}` from stdin and atomically write to `position.json`.
 
 ## Theme
 

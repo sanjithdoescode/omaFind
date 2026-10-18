@@ -1,5 +1,15 @@
 # Changelog
 
+## 2.0.0 — omaFind
+
+- **Native Rust Search Engine**: Replaced Python search script with compiled Rust binary (`omafind-search`) featuring LTO for sub-millisecond lookups.
+- **Desktop Application Launcher**: Indexes `.desktop` files across `/usr/share/applications` and `~/.local/share/applications` with app name, binary, category, and keyword matching. Launches apps via `gtk-launch`.
+- **Themed App Icons**: Resolves application icons from Omarchy's icon theme engine with Nerd Font glyph fallback.
+- **Fixed Results Initial Viewport Offset**: Eliminated the scroll offset race condition where initial search results started ~52px down. Results now reliably start aligned at the top on index 0.
+- **Hybrid Keyboard & Mouse Navigation**: Unifies selection highlighting; mouse hover only claims selection on intentional pointer movement (>2px delta), preventing stationary cursor interference when navigating via keyboard.
+- **Pinned Viewport Scrollbar & Edge Fades**: Anchored the scrollbar and gradient fade overlays to the `Flickable` viewport frame so they remain stationary while content scrolls.
+- **Atomic Position Persistence in Rust**: Pill drag coordinates persist atomically via `omafind-search --save-pos` to `~/.local/state/omafind/position.json`.
+
 ## 1.0.0 — omaFind
 
 First release of **omaFind** (`sanjith.omafind`), an ultra-fast local file search overlay for Omarchy Linux and Hyprland, adapted from the glass interface of omaSearch.

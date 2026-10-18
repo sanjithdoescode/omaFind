@@ -6,6 +6,7 @@ pub struct Config {
     pub limit: usize,
     pub home_only: bool,
     pub live: bool,
+    pub save_pos: bool,
 }
 
 pub fn parse() -> Config {
@@ -14,10 +15,15 @@ pub fn parse() -> Config {
     let mut limit = 50usize;
     let mut home_only = true;
     let mut live = false;
+    let mut save_pos = false;
 
     let mut i = 0;
     while i < argv.len() {
         match argv[i].as_str() {
+            "--save-pos" => {
+                save_pos = true;
+                i += 1;
+            }
             "--query" if i + 1 < argv.len() => {
                 query = argv[i + 1].clone();
                 i += 2;
@@ -44,5 +50,5 @@ pub fn parse() -> Config {
         }
     }
 
-    Config { query, limit, home_only, live }
+    Config { query, limit, home_only, live, save_pos }
 }

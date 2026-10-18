@@ -5,7 +5,6 @@ import QtQuick
 import QtQuick.Effects
 import qs.Commons
 import qs.Ui
-import "SearchModel.js" as SearchModel
 
 // omaFind overlay – blazing-fast local file search, Spotlight-style.
 // IPC: open / close / toggle / dismiss (same surface as omaSearch).
@@ -60,7 +59,6 @@ Item {
   readonly property string pluginDir: (manifest && manifest.__sourceDir)
     ? String(manifest.__sourceDir)
     : (Quickshell.env("HOME") + "/.config/omarchy/plugins/sanjith.omafind")
-  readonly property string searchScript: pluginDir + "/search.py"
   readonly property string searchBin:    pluginDir + "/bin/omafind-search"
   readonly property string positionPath: Quickshell.env("HOME") + "/.local/state/omafind/position.json"
 
@@ -131,11 +129,18 @@ Item {
   // Core functions
   // ─────────────────────────────────────────────────────────────────────────
 
+  function clip(value, limit) {
+    var text = String(value || "")
+    if (text.length <= limit) return text
+    return text.slice(0, limit) + "\u2026"
+  }
+
   function open(payloadJson) {
     root.opened = true
     root.keyboardNavActive = true
     root.lastMouseX = -1
     root.lastMouseY = -1
+    resultsList.contentY = 0
     Qt.callLater(function() {
       promptField.forceActiveFocus()
       promptField.selectAll()
@@ -170,6 +175,7 @@ Item {
     var q = root.searchQuery.replace(/^\s+|\s+$/g, "")
     if (!q) {
       resultsModel.clear()
+      resultsList.contentY = 0
       root.selectedIndex = -1
       root.searching     = false
       root.searchError   = ""
@@ -198,7 +204,7 @@ Item {
   }
 
   function searchBrowser() {
-    var query = SearchModel.clip(String(promptField.text || root.searchQuery || "").replace(/\s+/g, " "), 500).trim()
+    var query = root.clip(String(promptField.text || root.searchQuery || "").replace(/\s+/g, " "), 500).trim()
     if (!query) return
     var url = "https://www.google.com/search?q=" + encodeURIComponent(query)
     Quickshell.execDetached(["omarchy", "launch", "browser", url])
@@ -268,20 +274,49 @@ Item {
     }
     onExited: function() {
       root.searching = false
-      var data = SearchModel.parseSearchOutput(root.searchBuf)
+      var text = String(root.searchBuf || "").trim()
       root.searchBuf = ""
-      if (data.ok) {
+      if (!text) {
+        root.searchError = "No response from search backend."
+        root.selectedIndex = -1
+        resultsList.contentY = 0
+        resultsModel.clear()
+        return
+      }
+
+      var start = text.indexOf("{")
+      var end   = text.lastIndexOf("}")
+      var data = null
+      if (start !== -1 && end > start) {
+        try {
+          data = JSON.parse(text.slice(start, end + 1))
+        } catch (e) {
+          data = null
+        }
+      }
+
+      if (data && data.ok && Array.isArray(data.results)) {
         root.searchError = ""
         resultsModel.clear()
+        resultsList.contentY = 0
         for (var i = 0; i < data.results.length; i++) {
           var r = data.results[i]
-          resultsModel.append({ rPath: r.path, rName: r.name, rDir: r.dir, rKind: r.kind, rIcon: r.icon || "" })
+          if (!r || typeof r !== "object") continue
+          resultsModel.append({
+            rPath:  String(r.path  || ""),
+            rName:  String(r.name  || ""),
+            rDir:   String(r.dir   || ""),
+            rKind:  String(r.kind  || "file"),
+            rGlyph: String(r.glyph || "󰈔"),
+            rIcon:  String(r.icon  || "")
+          })
         }
         root.keyboardNavActive = true
         root.selectedIndex = resultsModel.count > 0 ? 0 : -1
       } else {
-        root.searchError   = data.error || "Search failed."
+        root.searchError   = (data && data.error) ? String(data.error) : "Search failed."
         root.selectedIndex = -1
+        resultsList.contentY = 0
         resultsModel.clear()
       }
     }
@@ -306,17 +341,10 @@ Item {
     }
   }
 
-  // Position persistence.
+  // Position persistence via omafind-search in Rust.
   Process {
     id: savePosProc
-    command: ["/usr/bin/python3", "-I", "-S", "-c",
-      "import os,sys,json,secrets\n" +
-      "d=os.path.expanduser('~/.local/state/omafind')\n" +
-      "os.makedirs(d,exist_ok=True)\n" +
-      "p=os.path.join(d,'position.json')\n" +
-      "t=os.path.join(d,'.pos.'+secrets.token_hex(4)+'.tmp')\n" +
-      "open(t,'w').write(sys.stdin.read())\n" +
-      "os.replace(t,p)\n"]
+    command: [root.searchBin, "--save-pos"]
     stdinEnabled: true
     onStarted: {
       savePosProc.write(root.savePosPayload)
@@ -367,10 +395,23 @@ Item {
     readonly property int gap:          Style.space(12)
     readonly property int surfaceWidth: Math.min(Style.space(640), panel.width - Style.space(32))
 
+    // Default resting Y anchor for the search pill: upper-third of display (macOS Spotlight style ~22%)
+    readonly property int pillTop:      Math.round(panel.height * 0.22)
+    readonly property int pillY:        panel.pillTop + panel.clampY(root.dragY)
+    readonly property int surfaceX:     Math.round((panel.width - panel.surfaceWidth) / 2) + panel.clampX(root.dragX)
+
+    // Total vertical space needed below the results card (hints bar + margins)
+    readonly property int belowHints:   hints.height + Style.space(16)
+
+    // Dynamic maximum height for results card, ensuring it never overflows screen bottom
     readonly property int cardMax: Math.max(
       Style.space(80),
-      Math.min(Math.round(panel.height * 0.6),
-               panel.height - pill.height - panel.below - panel.gap - Style.space(48)))
+      Math.min(
+        Math.round(panel.height * 0.58),
+        panel.height - pill.y - pill.height - panel.gap - panel.belowHints - Style.space(16)
+      )
+    )
+
     readonly property int cardTarget: root.showCard
       ? Math.min(
           card.contentTopInset + card.contentBottomInset
@@ -379,19 +420,15 @@ Item {
           panel.cardMax)
       : 0
 
-    readonly property int above:    root.showCard ? panel.cardTarget + panel.gap : 0
-    readonly property int below:    hints.height + Style.space(8)
-    readonly property int pillTop:  Math.round((panel.height - panel.above - pill.height - panel.below) / 2) + panel.above
-    readonly property int pillY:    panel.pillTop + panel.clampY(root.dragY)
-    readonly property int surfaceX: Math.round((panel.width - panel.surfaceWidth) / 2) + panel.clampX(root.dragX)
-
     function clampX(value) {
       var slack = Math.round((panel.width - panel.surfaceWidth) / 2) - Style.space(8)
       return Math.max(-slack, Math.min(slack, value))
     }
     function clampY(value) {
-      return Math.max(Style.space(8) + panel.above - panel.pillTop,
-                      Math.min(panel.height - Style.space(8) - panel.pillTop - pill.height - panel.below, value))
+      var minY = Style.space(12) - panel.pillTop
+      var currentBelow = (root.showCard ? (panel.cardTarget + panel.gap) : 0) + hints.height + Style.space(8)
+      var maxY = panel.height - Style.space(12) - panel.pillTop - pill.height - currentBelow
+      return Math.max(minY, Math.min(Math.max(minY, maxY), value))
     }
 
     // ── Backdrop scrim ────────────────────────────────────────────────────
@@ -424,14 +461,14 @@ Item {
       }
     }
 
-    // ── Results card (above the pill) ────────────────────────────────────
+    // ── Results card (below the pill) ────────────────────────────────────
     BorderSurface {
       id: card
 
       visible: root.showCard
       width:   panel.surfaceWidth
       x:       panel.surfaceX
-      y:       pill.y - panel.gap - card.height
+      y:       pill.y + pill.height + panel.gap
       height:  panel.cardTarget
       radius:  Style.space(20)
       color:   Qt.rgba(root.background.r, root.background.g, root.background.b, 0.55)
@@ -454,6 +491,7 @@ Item {
       Item {
         anchors.fill:    parent
         anchors.margins: card.contentTopInset
+        clip:            true
 
         // Card header: result count / searching state / error
         Item {
@@ -507,7 +545,7 @@ Item {
             visible: root.searchError !== "" && !root.searching
             anchors.right:          parent.right
             anchors.verticalCenter: parent.verticalCenter
-            text:           SearchModel.clip(root.searchError, 60)
+            text:           root.clip(root.searchError, 60)
             color:          Color.urgent
             font.family:    root.fontFamily
             font.pixelSize: Style.font.caption
@@ -529,10 +567,23 @@ Item {
           acceptedButtons:    Qt.NoButton
 
           function ensureVisible(index) {
+            if (index <= 0) {
+              contentY = 0
+              return
+            }
             var rowH = Style.space(52)
             var top  = index * rowH
-            if (top < contentY) contentY = top
-            else if (top + rowH > contentY + height) contentY = top + rowH - height
+            var bottom = top + rowH
+            if (top < contentY) {
+              contentY = top
+            } else if (height > rowH && bottom > contentY + height) {
+              contentY = bottom - height
+            }
+          }
+
+          onHeightChanged: {
+            if (root.selectedIndex <= 0) contentY = 0
+            else ensureVisible(root.selectedIndex)
           }
 
           Column {
@@ -549,6 +600,7 @@ Item {
                 required property string rName
                 required property string rDir
                 required property string rKind
+                required property string rGlyph
                 required property string rIcon
                 required property int    index
 
@@ -593,7 +645,7 @@ Item {
                     id: kindIcon
                     visible:             !resultRow.isApp || appIcon.status !== Image.Ready
                     anchors.centerIn:    parent
-                    text:                SearchModel.iconFor(resultRow.rKind)
+                    text:                resultRow.rGlyph || "󰈔"
                     color:               resultRow.rKind === "dir" ? Color.accent : root.note
                     font.family:         Style.font.family
                     font.pixelSize:      Style.font.title
@@ -611,7 +663,7 @@ Item {
                   anchors.rightMargin: Style.space(12)
                   anchors.top:         parent.top
                   anchors.topMargin:   Style.space(9)
-                  text:           SearchModel.clip(resultRow.rName, 100)
+                  text:           root.clip(resultRow.rName, 100)
                   color:          Color.menu.text
                   font.family:    root.fontFamily
                   font.pixelSize: Style.font.body
@@ -625,7 +677,7 @@ Item {
                   anchors.rightMargin:  Style.space(12)
                   anchors.bottom:       parent.bottom
                   anchors.bottomMargin: Style.space(9)
-                  text:           SearchModel.clip(resultRow.rDir, 120)
+                  text:           root.clip(resultRow.rDir, 120)
                   color:          root.subtle
                   font.family:    root.fontFamily
                   font.pixelSize: Style.font.caption
@@ -671,6 +723,8 @@ Item {
           // Scroll bar
           Item {
             id: scrollBar
+            parent: resultsList
+            z: 2
 
             readonly property real scrollable: resultsList.contentHeight - resultsList.height
             readonly property bool hot: scrollArea.containsMouse || scrollArea.pressed
@@ -718,6 +772,8 @@ Item {
 
           // Top/bottom edge fades
           Rectangle {
+            parent: resultsList
+            z: 1
             anchors { left: parent.left; right: parent.right; top: parent.top }
             height: Style.space(12)
             opacity: resultsList.contentY > 1 ? 1 : 0
@@ -729,6 +785,8 @@ Item {
           }
 
           Rectangle {
+            parent: resultsList
+            z: 1
             anchors { left: parent.left; right: parent.right; bottom: parent.bottom }
             height: Style.space(12)
             opacity: resultsList.atYEnd ? 0 : 1
@@ -938,16 +996,19 @@ Item {
       }
     }
 
-    // ── Hint bar (under the pill) ─────────────────────────────────────────
+    // ── Hint bar (under the pill or under the card) ───────────────────────
     Item {
       id: hints
 
       x:      pill.x + Style.space(12)
-      y:      pill.y + pill.height + Style.space(8)
+      y:      root.showCard
+                ? (card.y + card.height + Style.space(8))
+                : (pill.y + pill.height + Style.space(8))
       width:  pill.width - Style.space(24)
       height: Style.space(24)
       opacity: root.opened ? 1 : 0
       Behavior on opacity { NumberAnimation { duration: 100 } }
+      Behavior on y       { NumberAnimation { duration: 140; easing.type: Easing.OutCubic } }
 
       MouseArea {
         anchors.fill: parent
