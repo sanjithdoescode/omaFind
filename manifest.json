@@ -2,7 +2,7 @@
   "schemaVersion": 1,
   "id": "sanjith.omafind",
   "name": "omaFind",
-  "version": "1.0.0",
+  "version": "2.0.0",
   "author": "Sanjith",
   "license": "MIT",
   "description": "Blazing-fast local file search for Omarchy — Spotlight-style file finder powered by plocate with an fd live-search fallback. Type to search $HOME instantly, ↑↓ to navigate, Enter to open.",

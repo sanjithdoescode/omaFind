@@ -30,6 +30,9 @@ Item {
   property bool   homeOnly:    true   // restrict to $HOME
   property bool   liveSearch:  false  // use fd instead of plocate
   property int    selectedIndex: -1
+  property bool   keyboardNavActive: false
+  property real   lastMouseX: -1
+  property real   lastMouseY: -1
 
   // ── Position (drag) ──────────────────────────────────────────────────────
   property int dragX: 0
@@ -58,6 +61,7 @@ Item {
     ? String(manifest.__sourceDir)
     : (Quickshell.env("HOME") + "/.config/omarchy/plugins/sanjith.omafind")
   readonly property string searchScript: pluginDir + "/search.py"
+  readonly property string searchBin:    pluginDir + "/bin/omafind-search"
   readonly property string positionPath: Quickshell.env("HOME") + "/.local/state/omafind/position.json"
 
   // ── Computed ──────────────────────────────────────────────────────────────
@@ -129,6 +133,9 @@ Item {
 
   function open(payloadJson) {
     root.opened = true
+    root.keyboardNavActive = true
+    root.lastMouseX = -1
+    root.lastMouseY = -1
     Qt.callLater(function() {
       promptField.forceActiveFocus()
       promptField.selectAll()
@@ -137,6 +144,9 @@ Item {
 
   function close() {
     root.opened = false
+    root.keyboardNavActive = false
+    root.lastMouseX = -1
+    root.lastMouseY = -1
   }
 
   function dismiss() {
@@ -174,8 +184,16 @@ Item {
 
   function openSelected() {
     if (root.selectedIndex < 0 || root.selectedIndex >= resultsModel.count) return
-    var path = resultsModel.get(root.selectedIndex).rPath
-    Quickshell.execDetached(["xdg-open", path])
+    var item = resultsModel.get(root.selectedIndex)
+    var path = item.rPath
+    var kind = item.rKind
+    if (kind === "app") {
+      // Launch via gtk-launch using the desktop file basename (without .desktop).
+      var appName = path.replace(/^.*\//, "").replace(/\.desktop$/, "")
+      Quickshell.execDetached(["gtk-launch", appName])
+    } else {
+      Quickshell.execDetached(["xdg-open", path])
+    }
     root.dismiss()
   }
 
@@ -200,7 +218,21 @@ Item {
   function moveSelection(step) {
     var n = resultsModel.count
     if (!n) return
+    root.keyboardNavActive = true
     root.selectedIndex = Math.max(0, Math.min(n - 1, root.selectedIndex + step))
+  }
+
+  function resolveAppIcon(icon) {
+    if (root.shell && root.shell.appLibrary && typeof root.shell.appLibrary.iconSource === "function") {
+      return root.shell.appLibrary.iconSource(icon)
+    }
+    var value = String(icon || "")
+    if (!value) return Quickshell.iconPath("application-x-executable", true)
+    if (value.indexOf("file://") === 0 || value.indexOf("image://") === 0) return value
+    if (value.charAt(0) === "/") return "file://" + value
+    var themed = Quickshell.iconPath(value, true)
+    if (themed && themed.length > 0) return themed
+    return Quickshell.iconPath("application-x-executable", true)
   }
 
   function savePosition() {
@@ -222,7 +254,7 @@ Item {
   // Search worker: plocate (default) or fd (--live).
   Process {
     id: searchProc
-    command: ["/usr/bin/python3", "-I", "-S", root.searchScript,
+    command: [root.searchBin,
               "--query", root.searchQuery,
               "--limit", "50"]
               .concat(root.homeOnly   ? ["--home-only"] : ["--all"])
@@ -243,8 +275,9 @@ Item {
         resultsModel.clear()
         for (var i = 0; i < data.results.length; i++) {
           var r = data.results[i]
-          resultsModel.append({ rPath: r.path, rName: r.name, rDir: r.dir, rKind: r.kind })
+          resultsModel.append({ rPath: r.path, rName: r.name, rDir: r.dir, rKind: r.kind, rIcon: r.icon || "" })
         }
+        root.keyboardNavActive = true
         root.selectedIndex = resultsModel.count > 0 ? 0 : -1
       } else {
         root.searchError   = data.error || "Search failed."
@@ -374,6 +407,23 @@ Item {
       onClicked: root.dismiss()
     }
 
+    HoverHandler {
+      id: panelHover
+      onPointChanged: {
+        var sp = point.scenePosition
+        if (root.lastMouseX < 0) {
+          root.lastMouseX = sp.x
+          root.lastMouseY = sp.y
+          return
+        }
+        if (Math.abs(sp.x - root.lastMouseX) > 2 || Math.abs(sp.y - root.lastMouseY) > 2) {
+          root.lastMouseX = sp.x
+          root.lastMouseY = sp.y
+          root.keyboardNavActive = false
+        }
+      }
+    }
+
     // ── Results card (above the pill) ────────────────────────────────────
     BorderSurface {
       id: card
@@ -499,42 +549,63 @@ Item {
                 required property string rName
                 required property string rDir
                 required property string rKind
+                required property string rIcon
                 required property int    index
 
                 readonly property bool isSelected: resultRow.index === root.selectedIndex
+                readonly property bool isApp:      resultRow.rKind === "app"
 
                 width:  resultsColumn.width
                 height: Style.space(52)
 
-                // Selection / hover highlight
+                // Selection highlight
                 Rectangle {
                   anchors.fill:    parent
                   anchors.margins: Style.space(2)
                   radius: Style.cornerRadius
-                  color: resultRow.isSelected
-                    ? Color.menu.selectedBackground
-                    : (rowHover.hovered
-                        ? Qt.rgba(Color.menu.text.r, Color.menu.text.g, Color.menu.text.b, 0.06)
-                        : "transparent")
+                  color: resultRow.isSelected ? Color.menu.selectedBackground : "transparent"
                   Behavior on color { ColorAnimation { duration: 80 } }
                 }
 
-                // Nerd Font file-type icon
-                Text {
-                  id: kindIcon
+                // Icon container (App logo or Nerd Font glyph)
+                Item {
+                  id: iconBox
                   anchors.left:           parent.left
                   anchors.leftMargin:     Style.space(12)
                   anchors.verticalCenter: parent.verticalCenter
-                  text:           SearchModel.iconFor(resultRow.rKind)
-                  color:          resultRow.rKind === "dir" ? Color.accent : root.note
-                  font.family:    Style.font.family
-                  font.pixelSize: Style.font.title
+                  width:                  Style.space(28)
+                  height:                 Style.space(28)
+
+                  Image {
+                    id: appIcon
+                    visible:          resultRow.isApp && status === Image.Ready
+                    anchors.centerIn: parent
+                    width:            Style.space(26)
+                    height:           Style.space(26)
+                    fillMode:         Image.PreserveAspectFit
+                    sourceSize.width:  Math.round(width * Screen.devicePixelRatio)
+                    sourceSize.height: Math.round(height * Screen.devicePixelRatio)
+                    source:           resultRow.isApp ? root.resolveAppIcon(resultRow.rIcon) : ""
+                    asynchronous:     true
+                  }
+
+                  Text {
+                    id: kindIcon
+                    visible:             !resultRow.isApp || appIcon.status !== Image.Ready
+                    anchors.centerIn:    parent
+                    text:                SearchModel.iconFor(resultRow.rKind)
+                    color:               resultRow.rKind === "dir" ? Color.accent : root.note
+                    font.family:         Style.font.family
+                    font.pixelSize:      Style.font.title
+                    horizontalAlignment: Text.AlignHCenter
+                    verticalAlignment:   Text.AlignVCenter
+                  }
                 }
 
                 // File name (primary)
                 Text {
                   id: nameLabel
-                  anchors.left:        kindIcon.right
+                  anchors.left:        iconBox.right
                   anchors.leftMargin:  Style.space(10)
                   anchors.right:       parent.right
                   anchors.rightMargin: Style.space(12)
@@ -564,6 +635,27 @@ Item {
                 HoverHandler {
                   id: rowHover
                   cursorShape: Qt.PointingHandCursor
+                  onPointChanged: {
+                    var sp = point.scenePosition
+                    if (root.lastMouseX < 0) {
+                      root.lastMouseX = sp.x
+                      root.lastMouseY = sp.y
+                      return
+                    }
+                    if (Math.abs(sp.x - root.lastMouseX) > 2 || Math.abs(sp.y - root.lastMouseY) > 2) {
+                      root.lastMouseX = sp.x
+                      root.lastMouseY = sp.y
+                      root.keyboardNavActive = false
+                    }
+                    if (hovered && !root.keyboardNavActive && root.selectedIndex !== resultRow.index) {
+                      root.selectedIndex = resultRow.index
+                    }
+                  }
+                  onHoveredChanged: {
+                    if (hovered && !root.keyboardNavActive && root.selectedIndex !== resultRow.index) {
+                      root.selectedIndex = resultRow.index
+                    }
+                  }
                 }
 
                 TapHandler {
@@ -583,7 +675,7 @@ Item {
             readonly property real scrollable: resultsList.contentHeight - resultsList.height
             readonly property bool hot: scrollArea.containsMouse || scrollArea.pressed
 
-            anchors { right: resultsList.right; top: resultsList.top; bottom: resultsList.bottom }
+            anchors { right: parent.right; top: parent.top; bottom: parent.bottom }
             width:   Style.space(10)
             visible: scrollBar.scrollable > 1
 
@@ -626,7 +718,7 @@ Item {
 
           // Top/bottom edge fades
           Rectangle {
-            anchors { left: resultsList.left; right: resultsList.right; top: resultsList.top }
+            anchors { left: parent.left; right: parent.right; top: parent.top }
             height: Style.space(12)
             opacity: resultsList.contentY > 1 ? 1 : 0
             gradient: Gradient {
@@ -637,7 +729,7 @@ Item {
           }
 
           Rectangle {
-            anchors { left: resultsList.left; right: resultsList.right; bottom: resultsList.bottom }
+            anchors { left: parent.left; right: parent.right; bottom: parent.bottom }
             height: Style.space(12)
             opacity: resultsList.atYEnd ? 0 : 1
             gradient: Gradient {
@@ -756,6 +848,7 @@ Item {
             }
 
             onTextChanged: {
+              root.keyboardNavActive = true
               if (text.length > 200) {
                 var pos = cursorPosition
                 text = text.slice(0, 200)

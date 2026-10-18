@@ -6,6 +6,7 @@
 // ─── File-type icons (Nerd Font glyphs) ────────────────────────────────────
 // Requires a Nerd Font to be set as the terminal/UI font in your theme.
 var KIND_ICONS = {
+  app:     "󰀻",
   dir:     "󰉋",
   code:    "󰈮",
   image:   "󰈟",
@@ -68,7 +69,8 @@ function parseSearchOutput(raw) {
         path: clip(String(r.path || ""), 1000),
         name: clip(String(r.name || ""), 200),
         dir:  clip(String(r.dir  || ""), 300),
-        kind: clip(String(r.kind || "file"), 20)
+        kind: clip(String(r.kind || "file"), 20),
+        icon: clip(String(r.icon || ""), 200)
       })
     }
   }
